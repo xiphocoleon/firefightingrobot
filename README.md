@@ -1,6 +1,305 @@
 # firefightingrobot
-This is code for the robot that Thomas, Eze, Muhammad, Abdul, and Nordia are working on.
+#include "MotorDriver.h"
 
-Programming:
-  Thomas is working on navigation; Eze is working on code for device triggers
+const int TrigL_pin = A5;  // pin for triggering pulse    
+const int EchoL_pin = A4;  // pin for recieving echo
+const int TrigC_pin = A3;  // pin for triggering pulse    
+const int EchoC_pin = A2;  // pin for recieving echo
+const int TrigR_pin = A1;  // pin for triggering pulse    
+const int EchoR_pin = A0;  // pin for recieving echo
+
+const int tooClose = 28; // Tolerance for sensors to decide when to trigger an action
+const int start = 2; // pin for receiving start signal
+int buttonState = 0; // initial state for button-reading pin
+int rightTurns = 5;
+
+void setup() {
+  pinMode(TrigL_pin, OUTPUT);        // initialize the pulse pin as output:
+  pinMode(EchoL_pin, INPUT);         // initialize the echo_pin pin as an input:
+  pinMode(TrigC_pin, OUTPUT);        // initialize the pulse pin as output:
+  pinMode(EchoC_pin, INPUT);         // initialize the echo_pin pin as an input:
+  pinMode(TrigR_pin, OUTPUT);       // initialize the pulse pin as output:
+  pinMode(EchoR_pin, INPUT);         // initialize the echo_pin pin as an input:
+  pinMode(start, INPUT);
+
+  Serial.begin(9600);
+
+  /*Configure the motor A to control the wheel at the left side.*/
+  /*Configure the motor B to control the wheel at the right side.*/
+  motordriver.init();
+  motordriver.setSpeed(80,MOTORB);
+  motordriver.setSpeed(80,MOTORA);  
+
+}
+
+void loop() {
+
+  // Start button module: 
+  // Robot does nothing until Start button pushed
+
+  digitalWrite(start, LOW);
+  do {
+    buttonState = digitalRead(start);
+    Serial.print("Waiting for start button");
+    Serial.println("");
+    Serial.print("Start pin is: ");
+    Serial.print(start);
+    Serial.println("");
+    //delay(500);
+  }  
+  while (buttonState == LOW);
+
+  Serial.print("Button pushed");
+
+
+  // Sensing module:
+  // Robot takes three senses and then moves
+
+  while (true) {
+
+    int sensorReadingL;
+    int sensorReadingC;
+    int sensorReadingR;
+
+    sensorReadingL = sensorRead(TrigL_pin, EchoL_pin);
+    Serial.print("Left Sensor: ");
+    Serial.print(sensorReadingL);
+    Serial.print(" cm");
+    Serial.println();
+
+    delayMicroseconds(10);
+    sensorReadingC = sensorRead(TrigC_pin, EchoC_pin);
+    Serial.print("Center Sensor: ");
+    Serial.print(sensorReadingC);
+    Serial.print(" cm");
+    Serial.println();
+
+    delayMicroseconds(10);
+    sensorReadingR = sensorRead(TrigR_pin, EchoR_pin);
+    Serial.print("Right Sensor: ");
+    Serial.print(sensorReadingR);
+    Serial.print(" cm");
+    Serial.println();
+
+    determineTurn(sensorReadingL,sensorReadingC,sensorReadingR);
+
+  }
+}
+
+//-------------------------Sensor-------------------------------------
+long sensorRead(int Trig_pin, int Echo_pin)
+{
+  long duration, cm;
+  digitalWrite(Trig_pin, LOW);
+  delay(2);
+  digitalWrite(Trig_pin, HIGH);
+  delayMicroseconds(5);
+  digitalWrite(Trig_pin, LOW);
+
+  duration = pulseIn(Echo_pin, HIGH);
+  cm = microsecondsToCentimeters(duration);
+  cm = int(cm); 
+
+  delay(100);
+
+  return cm;
+}
+
+long microsecondsToCentimeters(long microseconds)
+{
+  return microseconds / 29 / 2;
+}
+//--------------------------------End Sensor----------------
+
+
+// -------- Forward and turn algorithm ---------------------
+
+void determineTurn(int ReadingL, int ReadingC, int ReadingR) {
+
+  int sensorReadingL;
+  int sensorReadingC;
+  int sensorReadingR;
+
+
+
   
+  int rightDistance = sensorRead(TrigR_pin, EchoR_pin);
+    int leftDistance = sensorRead(TrigL_pin, EchoL_pin);
+  
+// 1. FORWARD
+// Go forward if there is nothing too close in front, left, or right
+
+  if (ReadingC >= tooClose && ReadingL >= .25*tooClose && ReadingR >= .25*tooClose) {
+
+    motordriver.setSpeed(70,MOTORB);
+    motordriver.setSpeed(70,MOTORA);  
+    
+    while(ReadingC >= tooClose && ReadingC < 2000) {
+
+      motordriver.goForward();
+
+      ReadingC = sensorRead(TrigC_pin, EchoC_pin);
+      ReadingL = sensorRead(TrigL_pin, EchoL_pin);
+      ReadingR = sensorRead(TrigR_pin, EchoR_pin);
+      
+      Serial.print("Going forward; center sensor is: ");
+      Serial.println(ReadingC);
+      }
+
+       motordriver.stop();
+       
+    // Possible small L-R adjustments after going straight to "straighten out"
+    // A. Too close to something on right -- TURN LEFT
+    if(ReadingR <= tooClose*.2) {
+
+     while(ReadingR <= tooClose*.2) {
+
+        motordriver.goLeft();
+
+        ReadingC = sensorRead(TrigC_pin, EchoC_pin);
+        ReadingL = sensorRead(TrigL_pin, EchoL_pin);
+        ReadingR = sensorRead(TrigR_pin, EchoR_pin);
+
+        } 
+        
+         motordriver.stop();
+        
+      }
+
+   // B. Too close to something on left -- TURN RIGHT
+    if(ReadingL <= tooClose*.2) {
+
+      while(ReadingL <= tooClose*.2) {
+
+        motordriver.goRight();
+
+        ReadingC = sensorRead(TrigC_pin, EchoC_pin);
+        ReadingL = sensorRead(TrigL_pin, EchoL_pin);
+        ReadingR = sensorRead(TrigR_pin, EchoR_pin);
+
+        } 
+        
+         motordriver.stop();
+
+      }
+  }  // Done with going straight. Now Decide to turn
+
+
+
+  // 2. TURN left or right, because something "too close" in front
+  // Go right if any chance to go right occurs. If has turned right three times, will turn left next time
+ 
+  else {
+    // Needs to check if left or right is open. Will turn right if right open.
+    // Sense right
+    
+    
+ 
+   // Turn right if it is open and hasn't turned right four times
+
+    if (rightDistance >= .25*tooClose && rightTurns%4!=0) {
+
+      ReadingC = sensorRead(TrigC_pin, EchoC_pin);
+      ReadingL = sensorRead(TrigL_pin, EchoL_pin);
+      ReadingR = sensorRead(TrigR_pin, EchoR_pin);
+
+        motordriver.setSpeed(50,MOTORB);
+        motordriver.setSpeed(50,MOTORA);  
+
+      while (ReadingC <= tooClose) {
+        
+        // Slow down motors to not "overturn"
+        
+        motordriver.goRight();
+
+        ReadingC = sensorRead(TrigC_pin, EchoC_pin);
+        ReadingL = sensorRead(TrigL_pin, EchoL_pin);
+        ReadingR = sensorRead(TrigR_pin, EchoR_pin);
+        
+        Serial.print("Turning right, C is: ");
+        Serial.println(ReadingC);
+        Serial.print("Turning right, rightTurns is: ");
+        Serial.println(rightTurns);
+        
+      }
+      
+      rightTurns = rightTurns + 1;
+      
+    }
+
+  // Turn left if has gone right three times and left is open
+
+    else {
+
+      ReadingC = sensorRead(TrigC_pin, EchoC_pin);
+      ReadingL = sensorRead(TrigL_pin, EchoL_pin);
+      ReadingR = sensorRead(TrigR_pin, EchoR_pin);
+      
+        motordriver.setSpeed(50,MOTORB);
+        motordriver.setSpeed(50,MOTORA); 
+
+      while (ReadingC <= tooClose) {
+        
+        motordriver.goLeft();
+
+        ReadingC = sensorRead(TrigC_pin, EchoC_pin);
+        ReadingL = sensorRead(TrigL_pin, EchoL_pin);
+        ReadingR = sensorRead(TrigR_pin, EchoR_pin);
+        
+        Serial.print("Turning left, C is: ");
+        Serial.println(ReadingC);
+        Serial.print("Turning left, rightTurns is: ");
+        Serial.println(rightTurns);
+          }
+        }
+
+    motordriver.stop();
+  }
+  
+ 
+ // If robot is too close to front and something on left/right, makes a short backwards movement
+ 
+  if (ReadingC <= tooClose && ReadingR <= tooClose || ReadingC <= tooClose && ReadingL <= tooClose) {
+  motordriver.goBackward();
+  Serial.print("Going backward, C is: ");
+        Serial.println(ReadingC);
+        Serial.print("Right is: ");
+        Serial.println(ReadingR);
+        Serial.print("Left is: ");
+        Serial.println(ReadingL);
+  delay(250);
+  }
+
+// When C sensor up against wall, sometimes it gives very large reading
+if (ReadingC > 2000) {
+  motordriver.goBackward();
+  delay(250);
+  }
+
+// If generally stuck, sometimes a right turn is a good thing
+
+rightDistance = sensorRead(TrigR_pin, EchoR_pin);
+
+   if (rightDistance >= tooClose && rightTurns%4 != 0) {
+
+      ReadingC = sensorRead(TrigC_pin, EchoC_pin);
+      ReadingL = sensorRead(TrigL_pin, EchoL_pin);
+      ReadingR = sensorRead(TrigR_pin, EchoR_pin);
+
+        motordriver.setSpeed(50,MOTORB);
+        motordriver.setSpeed(50,MOTORA);  
+
+      while (ReadingC <= tooClose) {
+        
+        // Slow down motors to not "overturn"
+        
+        motordriver.goRight();
+
+        ReadingC = sensorRead(TrigC_pin, EchoC_pin);
+        ReadingL = sensorRead(TrigL_pin, EchoL_pin);
+        ReadingR = sensorRead(TrigR_pin, EchoR_pin);
+      }
+   }
+
+  
+}
