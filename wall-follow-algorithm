@@ -1,0 +1,14 @@
+// Pseudo code for wall-following algorithm
+
+/* /_/_/_/_/_/_ Function 1 /_/_/_/_/_/_/_/_
+
+Go forward
+Stop in front of obstacle
+Turn right until space to go forward
+
+Go forward
+Stop in front of obstacle
+Turn left until space to go forward
+
+
+
