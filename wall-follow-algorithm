@@ -10,5 +10,14 @@ Go forward
 Stop in front of obstacle
 Turn left until space to go forward
 
+Go forward
+Stop in front of obstacle
+Sense right
+Sense left
+  If space to right, go right
+  Elseif space to left, go left
+  Else complete 180 degree turn ** this has not been thought out **
+  
+(ended at step 10 in my notes; will continue)
 
 
