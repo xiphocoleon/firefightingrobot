@@ -2,6 +2,8 @@
 
 /* /_/_/_/_/_/_ Function 1 /_/_/_/_/_/_/_/_
 
+
+/_ Right Turn
 Go forward
 Stop in front of obstacle
 Turn right until space to go forward
@@ -18,6 +20,7 @@ Sense left
   Elseif space to left, go left
   Else complete 180 degree turn ** this has not been thought out **
   
-(ended at step 10 in my notes; will continue)
+
+
 
 
