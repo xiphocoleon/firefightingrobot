@@ -1,4 +1,4 @@
-# firefightingrobot
+# Fire fighting robot group progress file
 
 I am moving our working code to another file. This file should just be our ReadMe file, which can track our progress. Each person here can write their name and the date they update something. 
 
