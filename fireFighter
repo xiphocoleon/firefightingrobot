@@ -1,0 +1,291 @@
+/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_
+/_
+/_        CCNY FIRST ROBOTICS NAVIGATIONAL CODE SPRING 2015
+/_
+/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_
+
+//__ READ FIRST: Code comments:
+/*
+1. The stepper information here in the header has just been copied from the 
+Stepper file. It needs to be implemented correctly.
+
+1.1. Thomas: Old motor code has been removed. In some places where motor 
+commands are need, I have just used comments in place of where new stepper
+code should go
+
+2. Thomas: I have most recently been working on the orientation function.
+Please let me know if you are going to change this section so not as to undo
+each others' work.
+*/
+
+
+
+// BEGIN STEPPER TEMPLATE CODE -- NEEDS IMPLEMENTATION
+
+/*-----( Libraries )-----*/
+#include <Stepper.h>
+
+//---( Number of steps per revolution of INTERNAL motor in 4-step mode )---
+#define STEPS_PER_MOTOR_REVOLUTION 32   
+
+//---( Steps per OUTPUT SHAFT of gear reduction )---
+#define STEPS_PER_OUTPUT_REVOLUTION 32 * 64  //2048  
+
+/*-----( Declare objects )-----*/
+// create an instance of the stepper class, specifying
+// the number of steps of the motor and the pins it's
+// attached to
+
+//The pin connections need to be 4 pins connected
+// to Motor Driver In1, In2, In3, In4  and then the pins entered
+// here in the sequence 1-3-2-4 for proper sequencing
+Stepper small_stepper(STEPS_PER_MOTOR_REVOLUTION, 8, 10, 9, 11);
+
+/*-----( Declare Variables )-----*/
+int  Steps2Take;
+
+/*-----( Example of Stepper Command )-----*/
+  small_stepper.setSpeed(1);   // SLOWLY Show the 4 step sequence 
+  Steps2Take  =  4;  // Rotate CW
+  small_stepper.step(Steps2Take);
+  delay(2000);
+  
+// END STEPPER TEMPLATE CODE
+
+
+
+// BEGIN OUR "REAL" CODE
+
+
+// GLOBAL VARIABLE DECLARATIONS
+
+// I. Sensor pin declarations. Currently the back sensors have not been implemented.
+
+const int TrigLback_pin;  // pin for triggering pulse    
+const int EchoLback_pin;  // pin for recieving echo
+const int TrigLfront_pin = A5;  // pin for triggering pulse    
+const int EchoLfront_pin = A4;  // pin for recieving echo
+const int TrigC_pin = A3;  // pin for triggering pulse    
+const int EchoC_pin = A2;  // pin for recieving echo
+const int TrigRfront_pin = A1;  // pin for triggering pulse    
+const int EchoRfront_pin = A0;  // pin for recieving echo
+const int TrigRback_pin;  // pin for triggering pulse    
+const int EchoRback_pin;  // pin for recieving echo
+
+// 2. Start button declarations
+
+const int start = 2; // pin for receiving start signal
+int buttonState = 0; // initial state for button-reading pin
+
+// 3. Global tolerance value for "tooClose" distance
+
+int tooClose = 25;
+
+
+// BEGIN SETUP
+void setup() 
+{
+
+// 1. pinMode declarations
+
+  pinMode(TrigLback_pin, OUTPUT);        // initialize the pulse pin as output:
+  pinMode(EchoLback_pin, INPUT);         // initialize the echo_pin pin as an input:
+  
+  pinMode(TrigLfront_pin, OUTPUT);        // initialize the pulse pin as output:
+  pinMode(EchoLfront_pin, INPUT);         // initialize the echo_pin pin as an input:
+  
+  pinMode(TrigC_pin, OUTPUT);        // initialize the pulse pin as output:
+  pinMode(EchoC_pin, INPUT);         // initialize the echo_pin pin as an input:
+  
+  pinMode(TrigRfront_pin, OUTPUT);       // initialize the pulse pin as output:
+  pinMode(EchoRfront_pin, INPUT);         // initialize the echo_pin pin as an input:
+  
+  pinMode(TrigRback_pin, OUTPUT);        // initialize the pulse pin as output:
+  pinMode(EchoRback_pin, INPUT);         // initialize the echo_pin pin as an input:
+  
+  pinMode(start, INPUT);
+
+// 2. Motor declarations
+
+// These are needed with the new steppers
+
+// 3. Serial and other declarations
+
+  Serial.begin(9600);
+}
+
+// BEGIN LOOP
+void loop() 
+{
+  // Start button module:
+  // Robot does nothing until Start button pushed
+  // UPDATE: Thomas planning to re-write button function do not use do-while 2/27/2015
+  int buttonPushed = 0
+  digitalWrite(start, LOW);
+  
+  do 
+  {
+    buttonState = digitalRead(start);
+    Serial.println("Waiting for start button");
+    Serial.print("Start pin is: ");
+    Serial.println(start);
+    delay(500);
+  }
+  
+  while (buttonState == LOW);
+  Serial.println("Button pushed");
+
+  while (true) 
+  {    
+    // Orient robot parallel to nearest left or right wall
+    orientation();
+    determineTurn();
+  }
+}
+
+/*-----( Functions )-----*/
+void orientation() 
+{
+  int readLback, readLfront, readC, readRfront, readRback;
+//NOTE: This sensor read could probably be written as its own function, as will be used by many functions  
+   readLback = sensorRead(TrigLback_pin, EchoLback_pin);
+   delay(10);
+   readLfront = sensorRead(TrigLfront_pin, EchoLfront_pin);
+   delay(10);
+   readC = sensorRead(TrigC_pin, EchoC_pin);
+   delay(10);
+   readRfront = sensorRead(TrigRfront_pin, EchoRfront_pin);
+   delay(10);
+   readRback = sensorRead(TrigRback_pin, EchoRback_pin);
+   delay(10);
+   // End sensorRead 
+   
+   // Right-side parallel wall orientation
+   if (readRfront > readRback)
+   {
+     while(readRfront > readRback)
+     {
+       Serial.println("Turn right to orient");
+       //TURN RIGHT   
+       //Continuously take readings until WHILE loop untrue
+       readRfront = sensorRead(TrigRfront_pin, EchoRfront_pin);
+       delay(10);
+       readRback = sensorRead(TrigLfront_pin, EchoLfront_pin);
+       delay(10);
+       
+       Serial.print("Sensor right front: "); Serial.println(readRfront);
+       Serial.print("Sensor right back: "); Serial.println(readRback);
+     }
+    //Stop motor once parallel to wall
+    Serial.println("Motor stop");
+    //STOP MOTOR
+   } 
+   
+   else if (readRback > readRfront) 
+   {
+     while(readRback > readRfront)
+     {
+       Serial.println("Turn left to orient");
+       //TURN LEFT   
+       //Continuously take readings until WHILE loop untrue
+       readRfront = sensorRead(TrigRfront_pin, EchoRfront_pin);
+       delay(10);
+       readRback = sensorRead(TrigLfront_pin, EchoLfront_pin);
+       delay(10);
+       
+       Serial.print("Sensor right front: "); Serial.println(readRfront);
+       Serial.print("Sensor right back: "); Serial.println(readRback);
+     }
+    //Stop motor once parallel to wall
+    Serial.println("Motor stop");
+    //STOP MOTOR
+   }
+  
+  else
+  {
+    Serial.println("Help! I'm in orientation ELSE. Failed to orient.");
+  }
+  
+}// End orientation
+
+// determineTurn under construction. Please talk to Thomas before editing
+void determineTurn ()
+{
+  // five sensor read called
+  if (readRback <= tooClose)
+  {
+    if(readC <= tooClose)
+    {
+      while(readC <= tooClose)
+      {
+        // Call modular five sensor read
+        // MOTOR: TURN LEFT
+      }
+    }
+    else
+    {
+      while(readC >= tooClose)
+      {
+        // Call modular five sensor read
+        // MOTOR: GO STRAIGHT
+      }
+    }
+  }
+  
+  else
+  {
+    while(readRfront >= tooClose)
+    {
+      // Call modular five sensor read
+      // MOTOR: GO RIGHT
+    }
+  }
+}
+
+/*-----( Sensor Functions )-----*/
+
+// Sensor reading function
+long sensorRead(int Trig_pin, int Echo_pin)
+{
+  long duration, cm;
+  digitalWrite(Trig_pin, LOW);
+  delay(2);
+  digitalWrite(Trig_pin, HIGH);
+  delayMicroseconds(5);
+  digitalWrite(Trig_pin, LOW);
+
+  duration = pulseIn(Echo_pin, HIGH);
+  cm = microsecondsToCentimeters(duration);
+  cm = int(cm); 
+
+  delay(100);
+
+  return cm;
+} // End sensorRead
+
+
+// Calibration for sensor data to centimeters function
+long microsecondsToCentimeters(long microseconds)
+{
+  return microseconds / 29 / 2;
+}// End ms to cm
+
+// Modular sensor reading that reads all five sensors when called
+// NOTE: The function below is not complete. It is just a placeholder.
+/* Perhaps the sensor readings can just be stored in a five element array,
+one element for each sensor reading. The function below would read the sensors
+and then pass the values to the master sensor array. Does anyone know if this is
+a good or bad idea? */
+void fiveSensorRead()
+{
+   readLback = sensorRead(TrigLback_pin, EchoLback_pin);
+   delay(10);
+   readLfront = sensorRead(TrigLfront_pin, EchoLfront_pin);
+   delay(10);
+   readC = sensorRead(TrigC_pin, EchoC_pin);
+   delay(10);
+   readRfront = sensorRead(TrigRfront_pin, EchoRfront_pin);
+   delay(10);
+   readRback = sensorRead(TrigRback_pin, EchoRback_pin);
+   delay(10);
+}
