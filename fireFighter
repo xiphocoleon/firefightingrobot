@@ -13,8 +13,9 @@ Stepper file. It needs to be implemented correctly.
 commands are need, I have just used comments in place of where new stepper
 code should go
 
-2. Thomas: I have most recently been working on the orientation function.
-Please let me know if you are going to change this section so not as to undo
+2. Thomas: I have most recently been working on the orientation and 
+determineTurn function.
+Please let me know if you wan to help write these sections with me so not as to undo
 each others' work.
 */
 
