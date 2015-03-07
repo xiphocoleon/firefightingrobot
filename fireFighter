@@ -1,80 +1,54 @@
 /**********************************************************************************
- * /_
- * /_        CCNY FIRST ROBOTICS NAVIGATIONAL CODE SPRING 2015
- * /_
+ *
+ *        CCNY FIRST ROBOTICS NAVIGATIONAL CODE SPRING 2015
+ *
  ***********************************************************************************/
 //__ READ FIRST: Code comments:
 /*
-1. The stepper information here in the header has just been copied from the 
- Stepper file. It needs to be implemented correctly.
+1. I have finished the orientation function with the stepper code but it has not been tested.
+ I am not sure how "far" the stepper motors will turn for the values I entered.
  
- 1.1. Thomas: Old motor code has been removed. In some places where motor 
- commands are need, I have just used comments in place of where new stepper
- code should go
+ 2. Thomas: I am now working on the determineTurn function
  
- 2. Thomas: I have most recently been working on the orientation and 
- determineTurn function.
- Please let me know if you wan to help write these sections with me so not as to undo
- each others' work.
+ 3. The sound start, flame detect, and extinguish functions need to be written and tested
+ 
+ 4. Luky is working on a debounce feature to improve sensor reading reliability
+ 
+ 
  */
 
-
+//BEGIN CODE:
 
 // BEGIN STEPPER TEMPLATE CODE -- NEEDS IMPLEMENTATION
 
-/*-----( Libraries )-----
- #include <Stepper.h>
- 
- //---( Number of steps per revolution of INTERNAL motor in 4-step mode )---
- #define STEPS_PER_MOTOR_REVOLUTION 32   
- 
- //---( Steps per OUTPUT SHAFT of gear reduction )---
- #define STEPS_PER_OUTPUT_REVOLUTION 32 * 64  //2048  
- 
-/*-----( Declare objects )-----*/
-// create an instance of the stepper class, specifying
-// the number of steps of the motor and the pins it's
-// attached to
-
-//The pin connections need to be 4 pins connected
-// to Motor Driver In1, In2, In3, In4  and then the pins entered
-// here in the sequence 1-3-2-4 for proper sequencing
-//Stepper small_stepper(STEPS_PER_MOTOR_REVOLUTION, 8, 10, 9, 11);
-
-/*-----( Declare Variables )-----*/
-//int  Steps2Take;
-
-/*-----( Example of Stepper Command )-----*/
-//  small_stepper.setSpeed(1);   // SLOWLY Show the 4 step sequence 
-//  Steps2Take  =  4;  // Rotate CW
-//  small_stepper.step(Steps2Take);
-//  delay(2000);
-
-//END STEPPER TEMPLATE CODE
-
-
-
-// BEGIN OUR "REAL" CODE
-
+/*-----( Libraries )-----*/
+#include <NewPing.h>
+#define MAX_DISTANCE 200 // Maximum distance we want to ping for (in centimeters). Maximum sensor distance is rated at 400-500cm.
+#include <AccelStepper.h>
+#define HALFSTEP 8
 
 // GLOBAL VARIABLE DECLARATIONS
 
 // I. Sensor pin declarations. Currently the back sensors have not been implemented.
 
-int TrigLback_pin;  // pin for triggering pulse    
-int EchoLback_pin;  // pin for recieving echo
-const int TrigLfront_pin = A5;  // pin for triggering pulse    
-const int EchoLfront_pin = A4;  // pin for recieving echo
-const int TrigC_pin = A3;  // pin for triggering pulse    
+const int TrigLback_pin = 7;  // pin for triggering pulse    
+const int EchoLback_pin = A0;  // pin for recieving echo
+const int TrigLfront_pin = 3;  // pin for triggering pulse    
+const int EchoLfront_pin = A1;  // pin for recieving echo
+const int TrigC_pin = 4;  // pin for triggering pulse    
 const int EchoC_pin = A2;  // pin for recieving echo
-const int TrigRfront_pin = A1;  // pin for triggering pulse    
-const int EchoRfront_pin = A0;  // pin for recieving echo
-int TrigRback_pin;  // pin for triggering pulse    
-int EchoRback_pin;  // pin for recieving echo
+const int TrigRfront_pin = 5;  // pin for triggering pulse    
+const int EchoRfront_pin = A3;  // pin for recieving echo
+const int TrigRback_pin=6;  // pin for triggering pulse    
+const int EchoRback_pin = A4;  // pin for recieving echo
 
-// 2. Start button declarations
+// 2. Start button, sound start, flame sensor declarations
 const int start = 2; // pin for receiving start signal
 int buttonState = 0; // initial state for button-reading pin
+int soundDetect; //Need analog pin on the MEGA 
+int flameDetect; //Need analog pin on Mega
+int flameState = 0;
+int flameThreshold;
 
 // 3. Global tolerance value for "tooClose" distance
 int tooClose = 25;
@@ -85,6 +59,33 @@ int readRfront;
 int readC;
 int readLfront;
 int readLback;
+
+// 5. Stepper declaration section:
+// -- motor pins
+#define motorPin1  3     // IN1 on the ULN2003 driver 1
+#define motorPin2  4     // IN2 on the ULN2003 driver 1
+#define motorPin3  5     // IN3 on the ULN2003 driver 1
+#define motorPin4  6     // IN4 on the ULN2003 driver 1
+
+#define motorPin5  8     // IN1 on the ULN2003 driver 2
+#define motorPin6  9     // IN2 on the ULN2003 driver 2
+#define motorPin7  10    // IN3 on the ULN2003 driver 2
+#define motorPin8  11    // IN4 on the ULN2003 driver 2
+
+// -- Initialize stepper motors with pin sequence IN1-IN3-IN2-IN4 for using the AccelStepper with 28BYJ-48
+AccelStepper stepper1(HALFSTEP, motorPin1, motorPin3, motorPin2, motorPin4);
+AccelStepper stepper2(HALFSTEP, motorPin5, motorPin7, motorPin6, motorPin8);
+
+// -- Stepper variables
+int turnSteps = 2100; // number of steps for a 90 degree turn
+int lineSteps = -6600; //number of steps to drive straight
+int stepperSpeed = 1000; //speed of the stepper (steps per second)
+int steps1 = 0; // keep track of the step count for motor 1
+int steps2 = 0; // keep track of the step count for motor 2
+
+// -- variables from Stepper code to keep track of turns -- may not be needed
+bool turn1 = false; //keep track if we are turning or going straight next
+bool turn2 = false; //keep track if we are turning or going straight next
 
 
 // BEGIN SETUP
@@ -112,7 +113,15 @@ void setup()
 
   // 2. Motor declarations
 
-  // These are needed with the new steppers
+  delay(3000); //sime time to put the robot down after swithing it on
+
+  stepper1.setMaxSpeed(2000.0);
+  stepper1.move(1);  // I found this necessary
+  stepper1.setSpeed(stepperSpeed);
+
+  stepper2.setMaxSpeed(2000.0);
+  stepper2.move(-1);  // I found this necessary
+  stepper2.setSpeed(stepperSpeed);
 
   // 3. Serial and other declarations
 
@@ -122,23 +131,26 @@ void setup()
 // BEGIN LOOP
 void loop() 
 {
-  // Start button module:
-  // Robot does nothing until Start button pushed
-  // UPDATE: Thomas planning to re-write button function do not use do-while 2/27/2015
+  // Start button and sound detection module:
+  // Robot does nothing until Start button pushed OR 3.8kHz sound signalled  
   int buttonPushed = 0;
   digitalWrite(start, LOW);
 
+  int soundThreshold = 532;
+  int soundCheck = 0;
+  /*
   do 
-  {
-    buttonState = digitalRead(start);
-    Serial.println("Waiting for start button");
-    Serial.print("Start pin is: ");
-    Serial.println(start);
-    delay(500);
-  }
-
-  while (buttonState == LOW);
-  Serial.println("Button pushed");
+   {
+   buttonState = digitalRead(start);
+   soundCheck = analogRead(soundDetect);
+   Serial.println("Waiting to begin"); 
+   Serial.print("Start pin is: "); Serial.println(start);
+   Serial.print("soundCheck value is: "); Serial.println(soundCheck);
+   delay(500);
+   }
+   */
+  // while (buttonState == LOW /*|| (soundCheck < soundThresh) */);
+  // Serial.println("Button pushed or sound heard");
 
   while (true) 
   {    
@@ -155,112 +167,182 @@ void orientation()
   int* sensorArray = fiveSensorRead();
   //The sensor variable names in the if/while/else if statements need to be updated
   //to ex: fiveSensorRead[]
-  
-  // Right-side parallel wall orientation
+
   // Sensor array is read from left-back, clockwise to right-back
   // Sensor array elements: 0 left back, 1 left front, 2 center, 3 right front, 4 right back
+
+  // Right-side parallel wall orientation, turn to right
   if (sensorArray[3] > sensorArray[4])
   {
     while(sensorArray[3] > sensorArray[4])
     {
       Serial.println("Turn right to orient");
-      //TURN RIGHT   
-      //Continuously take readings until WHILE loop untrue
+      // Call modular five sensor read
       fiveSensorRead();
-      delay(10);
+      // MOTOR: TURN RIGHT        
+      stepper1.move(100); //Left stepper turns 100 forwards
+      stepper2.move(-100); //Right stepper turns 100 backwards
 
       Serial.print("Sensor right front: "); 
       Serial.println(sensorArray[3]);
       Serial.print("Sensor right back: "); 
       Serial.println(sensorArray[4]);
     }
+
     //Stop motor once parallel to wall
     Serial.println("Motor stop");
     //STOP MOTOR
+    stepper1.move(0);
+    stepper2.move(0); //motors stopped
   } 
 
+  //Right-side wall orientation, turn to left:
   else if (sensorArray[4] > sensorArray[3]) 
   {
     while(sensorArray[4] > sensorArray[3])
     {
       Serial.println("Turn left to orient");
-      //TURN LEFT   
-      //Continuously take readings until WHILE loop untrue
+      // Call modular five sensor read
       fiveSensorRead();
-      delay(10);
-      
+      // MOTOR: TURN LEFT        
+      stepper1.move(-100); //Left stepper turns 100 backwards
+      stepper2.move(100); //Right stepper turns 100 forwards
+
       Serial.print("Sensor right front: "); 
       Serial.println(sensorArray[3]);
       Serial.print("Sensor right back: "); 
       Serial.println(sensorArray[4]);
     }
+
     //Stop motor once parallel to wall
     Serial.println("Motor stop");
     //STOP MOTOR
-  }
+    stepper1.move(0);
+    stepper2.move(0); //motors stopped
+  } 
 
   else
   {
-    Serial.println("Help! I'm in orientation ELSE. Failed to orient.");
+    while (sensorArray[2] > tooClose);
+    {
+      Serial.println("Help! I'm in orientation ELSE. Failed to orient.");
+      Serial.println("Going forward, just a little bit until gets too close to center sensor.");
+      stepper1.move(100);
+      stepper2.move(100); //motors stopped
+    }
   }
 
 }// End orientation
 
-// determineTurn under construction. Please talk to Thomas before editing
 void determineTurn ()
 {
-  // five sensor read called
+  // Orientation should be complete, and car should be parallel to wall
+  // Five sensor read called:
   int* sensorArray = fiveSensorRead();
+
+  // sensorArray elements read left back counter-clockwise to right back:
+  //  0 Left Back, 1 Left Front, 2 Center, 3 Right Front, 4 Right Back
   
-  if (sensorArray[4] <= tooClose)
+  // Determine Turn Part 1: Go straight first, if possible:
+  if ( sensorArray[2] > tooClose)
   {
-    if(sensorArray[2] <= tooClose)
+    while(sensorArray[2] > tooClose)
+    {
+      sensorArray = fiveSensorRead();
+      stepper1.move(100);
+      stepper2.move(100); //Steppers go forward
+      Serial.println("Determine Turn 1: go straight first if possible");
+    }
+  }   
+  else
+  {  
+  Serial.println("Determine Turn 1: straight is blocked. Move on to Determine turn part 2.");
+  }
+  delay(100);
+  
+    
+  // Determine Turn Part II: Right turn priority algorithm:
+  //Comments in CAPS from TURN FLOWCHART shared on Google Drive
+
+  // -- IS RIGHT BLOCKED?
+
+  // -- YES.
+  if ( (sensorArray[4] <= tooClose) && (sensorArray[3] <= tooClose )  )
+  {
+    Serial.println("Determine Turn 2: right is blocked");
+    // -- IS FORWARD BLOCKED?
+    // -- NO. GO FORWARD UNTIL RIGHT OPEN
+    if (sensorArray[2] > tooClose)
+    {
+      Serial.println("Determine Turn 2: straight is open. Prepare to go straight.");
+      while(sensorArray[2] > tooClose)
+      {
+        Serial.println("Determine Turn 2: Going straight until too close");
+        fiveSensorRead();
+        stepper1.move(100);
+        stepper2.move(100);
+      }
+    }
+    // -- YES FORWARD BLOCKED. TURN LEFT 90 DEGREES.
+    else
     {
       while(sensorArray[2] <= tooClose)
       {
         // Call modular five sensor read
-        // MOTOR: TURN LEFT
-      }
-    }
-    else
-    {
-      while(sensorArray[2] >= tooClose)
-      {
-        // Call modular five sensor read
-        // MOTOR: GO STRAIGHT
+        fiveSensorRead();
+        // MOTOR: TURN LEFT   
+        Serial.println("Determine Turn 2: forward and right blocked. Going left.");
+        stepper1.move(-100); //Left stepper turns 100 backwards
+        stepper2.move(100); //Right stepper turns 100 forwards
       }
     }
   }
-
+  // -- NO. RIGHT NOT BLOCKED. TURN RIGHT 90 DEGREES
   else
   {
-    while(sensorArray[3] >= tooClose)
-    {
-      // Call modular five sensor read
-      // MOTOR: GO RIGHT
-    }
+      while(sensorArray[2] <= tooClose)
+      {
+        // Call modular five sensor read
+        fiveSensorRead();
+        // MOTOR: TURN RIGHT   
+        Serial.println("Determine Turn 2: Right is open. Turning 90 degrees to right.");
+        stepper1.move(100); //Left stepper turns 100 forwards
+        stepper2.move(-100); //Right stepper turns 100 backwards
+      }  
   }
+
+}
+
+/*-----( Flame Sensor Functions )-----*/
+int flameSense()
+{
+  flameState = analogRead(flameDetect);
+  if (flameState > flameThreshold)
+  {
+    //If flameState has detected the candle, run extinguish function
+    extinguish();
+  }
+  else{
+  }
+
+}
+
+void extinguish ()
+{
 }
 
 /*-----( Sensor Functions )-----*/
 
 // Sensor reading function
-long sensorRead(int Trig_pin, int Echo_pin)
+
+//Luky: some declarations missing here; not sure what you want, so this is commented out for now.
+int sensorRead(int Trig_pin, int Echo_pin)
 {
-  long duration, cm;
-  digitalWrite(Trig_pin, LOW);
-  delay(2);
-  digitalWrite(Trig_pin, HIGH);
-  delayMicroseconds(5);
-  digitalWrite(Trig_pin, LOW);
-
-  duration = pulseIn(Echo_pin, HIGH);
-  cm = microsecondsToCentimeters(duration);
-  cm = int(cm); 
-
-  delay(100);
-
-  return cm;
+  NewPing sonar(Trig_pin, Echo_pin, MAX_DISTANCE); // NewPing setup of pins and maximum distance.
+  delay(50);                      // Wait 50ms between pings (about 20 pings/sec). 29ms is the shortest delay between pings
+  unsigned int uS = sonar.ping(); // Send ping, get ping time in microseconds (uS).
+  int reading = uS / US_ROUNDTRIP_CM;
+  return reading;
 } // End sensorRead
 
 
@@ -277,26 +359,29 @@ int* fiveSensorRead()
 {
   //Element 0
   readLback = sensorRead(TrigLback_pin, EchoLback_pin);
-  delay(10);
-  
+  delay(100);
+  //Serial.print("LB: "); Serial.println(readLback);
   //Element 1
   readLfront = sensorRead(TrigLfront_pin, EchoLfront_pin);
-  delay(10);
-  
+  delay(100);
+  //Serial.print("LF: "); Serial.println(readLfront);
+
   //Element 2
   readC = sensorRead(TrigC_pin, EchoC_pin);
-  delay(10);
-  
+  delay(100);
+  Serial.print("C: "); 
+  Serial.println(readC);
   //Element 3
   readRfront = sensorRead(TrigRfront_pin, EchoRfront_pin);
-  delay(10);
-  
+  delay(100);
+  //Serial.print("RF: "); Serial.println(readRfront);
   //Element 4
   readRback = sensorRead(TrigRback_pin, EchoRback_pin);
-  delay(10);
+  delay(100);
+  //Serial.print("RB: "); Serial.println(readRback);
 
   int sensorReading[5] = {
-    readLback, readLfront, readC, readRfront, readRback  }; 
+    readLback, readLfront, readC, readRfront, readRback    }; 
 
   return sensorReading;
 }
